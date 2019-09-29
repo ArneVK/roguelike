@@ -155,8 +155,8 @@ end
 
 Entity = class('Entity'):include(index)
 
-function Entity:initialize(spawn,x,y,sheet,w,h,anims,visible,col,colShape,colValues,colFilter,scale,shadow,children)
-  self.spawned = spawn
+function Entity:initialize(x,y,w,h,scale,sheet,anims,colShape,colValues,colFilter,shadow,children)
+  self.spawned = true
   self.x = x
   self.y = y
   self.sheet = sheet
@@ -167,12 +167,12 @@ function Entity:initialize(spawn,x,y,sheet,w,h,anims,visible,col,colShape,colVal
     w = w,
     h = h
   }
-  self.visible = visible
-  self.col = col
+  self.visible = true
+  self.hasCol = true
   self.colShape = colShape
   self.colValues = colValues
   self.colFilter = colFilter
-  if self.speed == nil then self.speed = 1 end -- still needs a fix
+  self.speed = 1  -- still needs a fix
   self.scale = scale or 2/3
   children = children or {}
   if shadow ~= nil then
@@ -222,7 +222,7 @@ function Entity:moveDir(dir, dt, knockBack)
   local vx, vy = speed*dt*dx, speed*dt*dy
   self.x, self.y = self.x + vx, self.y + vy
   self.animValues.x, self.animValues.y = self.animValues.x + vx, self.animValues.y + vy
-  if self.col then
+  if self.hasCol then
     local cx, cy = self.colShape:center()
     self.colShape:moveTo(cx + vx, cy + vy)
   end
