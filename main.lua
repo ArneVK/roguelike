@@ -107,13 +107,14 @@ end
 function camera:followEntity()
   local width, height, flags = love.window.getMode()
   local x, y = love.graphics.inverseTransformPoint(width/2, height/2)
-  x, y = x/camera.scale, y/camera.scale
-  love.graphics.scale(camera.scale, camera.scale)
-  love.graphics.translate(-self.entity.x+x-(self.entity.w*self.entity.scale/2), -self.entity.y+y-(self.entity.h*self.entity.scale/2)) 
+  x, y = x/self.scale, y/self.scale
+  love.graphics.scale(self.scale, self.scale)
+  local w, h, scale = self.entity.animPos.w, self.entity.animPos.h, self.entity.scale
+  love.graphics.translate(-self.entity.x+x-(w*scale), -self.entity.y+y-(h*scale/2))
 end
 
 function camera:keepLocked()
-  love.graphics.scale(camera.scale, camera.scale)
+  love.graphics.scale(self.scale, self.scale)
   love.graphics.translate(-self.x, -self.y)
 end
 
@@ -185,6 +186,8 @@ function love.draw()
     camera:keepLocked()
   end
   
+  witch:draw()
+  --[[
   drawTileBatch(defaultTiles)
   drawTeleporters()
 
@@ -242,6 +245,7 @@ function love.draw()
     h:draw()
   end
 
+  ]]
   console:log("x: " .. witch.x .. " y: " .. witch.y)
   console:log(Debug, witch.x-24, witch.y-20)
   console:draw()
@@ -249,6 +253,8 @@ end
 
 function love.update(dt)
 
+  witch:update(dt)
+  --[[
   Hud:update()
 
   table.sort(entityList, rearrangeListOnYaxis)
@@ -278,17 +284,19 @@ function love.update(dt)
       e:update(dt)
     end
   end
+  ]]
 end
 
 function love.load()
  -- love.window.setMode(scale*64,scale*64)
   love.window.setTitle('WitchDagger')
   love.graphics.setDefaultFilter("nearest")
-  
+ 
   witch = Witch:new(0,0)
+  camera.entity = witch
+  --[[
   Hud:load(witch)
   witch:addToWorldWithChildren()
-  camera.entity = witch
 
   local tileId = Tile:addImage('default', 'sprites/brick_tile.png')
 
@@ -324,4 +332,5 @@ function love.load()
     tele2:setchild(tele)
     tele2:addOnTeleport(goBackToSpawnFunc)
   end
+  ]]
 end

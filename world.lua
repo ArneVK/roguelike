@@ -19,11 +19,11 @@ function World:addToWorld(item, shape, ...)
   elseif shape == 'polygon' then
     item.hitShape = self:polygon(...)
   end
-  item.col = true
+  item.hasCol = true
 end
 
 function World:removeFromWorld(item)
-  item.col = false
+  item.hasCol = false
   self:remove(item.hitShape)
 end
 

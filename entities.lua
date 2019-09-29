@@ -155,28 +155,39 @@ end
 
 Entity = class('Entity'):include(index)
 
-function Entity:initialize(x,y,w,h,scale,sheet,anims,colShape,colValues,colFilter,shadow,children)
+function Entity:initialize(x,y,scale,arx,ary,w,h,sheet,anims,crx,cry,shape,colFilter,shadowWidth,speed,children)
   self.spawned = true
   self.x = x
   self.y = y
+  self.scale = scale
   self.sheet = sheet
   self.anims = anims
-  self.animValues = {
-    x = x - w/2,
-    y = y - h,
+  -- Top Left position of an animation/images
+  self.animPos = {
+    x = x - arx,
+    y = y - ary,
     w = w,
-    h = h
+    h = h,
+    rx = arx,
+    ry = ary,
+    angle = 0
   }
   self.visible = true
-  self.hasCol = true
-  self.colShape = colShape
-  self.colValues = colValues
+  self.hasCol = false
+  -- Center position of a hitshape
+  self.colPos = {
+    x = x - crx,
+    y = y - cry,
+    rx = crx,
+    ry = cry,
+    angle = 0
+  }
+  self.shape = shape
   self.colFilter = colFilter
-  self.speed = 1  -- still needs a fix
-  self.scale = scale or 2/3
+  self.speed = speed
   children = children or {}
-  if shadow ~= nil then
-    children['Shadow'] = {Shadow(x,y,unpack(shadow),self.scale)}
+  if shadowWidth ~= nil and shadowWidth > 0 then
+    children['Shadow'] = {Shadow(x,y,shadowWidth,self.scale)}
   end
   self.children = {}
   if children ~= nil then
@@ -193,17 +204,6 @@ function Entity:initialize(x,y,w,h,scale,sheet,anims,colShape,colValues,colFilte
   end
   self:setIndex()
   table.insert(entityList, self)
-end
-
-function Entity:addToWorldWithChildren()
-  world:addToWorld(self, self.colShape, unpack(self.colValues))
-  if self.children ~= nil then
-    for _,e in pairs(self.children) do
-      if not e:isInstanceOf(Ground) then
-        world:addToWorld(e, e.colShape, unpack(e.colValues))
-      end
-    end
-  end
 end
 
 function Entity:removeFromWorldWithChildren()
@@ -223,8 +223,8 @@ function Entity:moveDir(dir, dt, knockBack)
   self.x, self.y = self.x + vx, self.y + vy
   self.animValues.x, self.animValues.y = self.animValues.x + vx, self.animValues.y + vy
   if self.hasCol then
-    local cx, cy = self.colShape:center()
-    self.colShape:moveTo(cx + vx, cy + vy)
+    local cx, cy = self.hitShape:center()
+    self.hitShape:moveTo(cx + vx, cy + vy)
   end
 end
 
@@ -280,18 +280,18 @@ end
 
 Melee = class('Melee', Entity)
 
-function Melee:initialize(x,y,sheet,anims,scale)
+function Melee:initialize(x,y,scale,w,h,arx,ary,sheet,anims,damage)
   local values = {main = {2.5,4,1,1},
                   west = {-8, -1, 7, 12}, 
                   east = {7, -1, 7, 12}, 
                   north = {-3, -7.5, 12, 7}, 
                   south = {-3, 10, 12, 7}}
+  self.damage = damage
   self.leftToRight = true
   self.active = false
-  self.isPlayerAttack = true -- should be removed or smth
-  self.damage = 10
+  self.isPlayerAttack = true
   self.direction = 2
-  Melee.super.initialize(self,true,x,y,sheet,w,h,anims,true,values,true,"rectangle",values,nil,scale)
+  Melee.super.initialize(self,x,y,scale,w,h,arx,ary,sheet,anims,0,0,"rectangle")
 end
 
 Staff = class('Staff', Melee)
@@ -313,7 +313,7 @@ function Staff:initialize(x,y)
   anims.northAnimationLTR = anims.southAnimationRTL:clone():flipV()
   anims.westAnimationRTL = anims.eastAnimationLTR:clone():flipH()
   anims.westAnimationLTR = anims.eastAnimationRTL:clone():flipH()
-  Staff.super.initialize(self,x,y,sheet,w,h,anims,scale)
+  Staff.super.initialize(self,x,y,sheet,w,h,w,h,anims,scale)
 end
 
 
@@ -451,9 +451,9 @@ function Witch:initialize(x,y)
     current = nil
   }
   anims.current = anims.southIdle
-  h = h - 6
   local values = { main = {7.5, 10, 6, 9.5}}
-  local children = { Staff = {Staff(x,y), false}}
+ -- local children = { Staff = {Staff(x,y), false}}
+  local children = {}
   self.direction = -1
   self.lastDirection = 2
   self.faceDirection = 2
@@ -471,8 +471,8 @@ function Witch:initialize(x,y)
   self.baseSpeed = 50
   self.tiredSpeed = 75
   self.maxSpeed = 100
-  self.speed = self.baseSpeed
-  Witch.super.initialize(self,true,x,y,sheet,w,h,anims,true,true,'rectangle',values,nil,scale,{6.5},children)
+  Witch.super.initialize(self,x,y,scale,w,h,w/2,h,sheet,anims,0,7,'rectangle',nil,6.5,self.baseSpeed,children)
+  world:addToWorld(self, self.shape, self.colPos.x, self.colPos.y, 6, 9.5)
 end
 
 function Witch:update(dt)
@@ -655,10 +655,11 @@ function Witch:move(dt)
     local direction = self.lastDirection
     local dx = (direction == 1 and 1 or direction == 3 and -1 or 0) *dt*self.speed
     local dy = (direction == 2 and 1 or direction == 0 and -1 or 0) *dt*self.speed
-    local v1, v2 = self:getValues()
-    local x, y, cols, len = world:move(self, self.x + dx + v1, self.y + dy + v2, self.filter)
-    self.x, self.y = x - v1, y - v2
-    -- Fuck with this and get eaten by TàNy teH P0nY
+    self.x, self.y = self.x + dx, self.y + dy
+    self.animPos.x, self.animPos.y = self.x - self.animPos.rx, self.y - self.animPos.ry
+    self.hitShape:move(dx, dy)
+    self.colPos.x, self.colPos.y = self.hitShape:center()
+    --[[
     for i = 1, len do
       if cols[i].other.isEnemy then
         if self.speed > self.baseSpeed then
@@ -675,8 +676,9 @@ function Witch:move(dt)
         end
       end
     end
+    ]]
   end
-  Debug = 'Direction: ' .. self.direction .. ' Last: ' .. self.lastDirection .. ' Face: ' .. self.faceDirection .. ' moveStatus: ' .. self.moveStatus .. ' Speed: ' .. self.speed
+  --Debug = 'Direction: ' .. self.direction .. ' Last: ' .. self.lastDirection .. ' Face: ' .. self.faceDirection .. ' moveStatus: ' .. self.moveStatus .. ' Speed: ' .. self.speed
   --Debug = 'WalkTime ' .. self.walkTime .. ' speed ' .. self.speed
 end
 
@@ -909,25 +911,20 @@ end
 ]]
 
 Ground = class('Ground', Entity)
-function Ground:initialize(spawn,x,y,sheet,w,h,anims,vis,col,shape,values,filter,scale,children,hazard)
+
+function Ground:initialize(x,y,scale,w,h,arx,ary,sheet,shape,filter,speed,children,hazard)
   -- Not sure what values should be given here, but i'm certain it's probably gonna be handy in the longrun
   self.isHazard = hazard
-  Ground.super.initialize(self,spawn,x,y,sheet,w,h,anims,vis,col,shape,values,filter,scale,nil,children)
+  Ground.super.initialize(self,x,y,scale,w,h,arx,ary,sheet,nil,x,y,shape,filter,nil,speed,children)
 end
 
 Shadow = class('Shadow', Ground)
 
 -- Should only be used as a childEntity
 
-function Shadow:initialize(x,y,w,h,scale)
-  if h == nil or h == 0 then
-    scale = w
-    w, h = 6.5, 0.65
-  elseif scale == nil or scale == 0 then
-    scale = h
-    h = w/10
-  end
-  Shadow.super.initialize(self,true,x,y,nil,w,h,nil,true,false,nil,nil,nil,scale,nil,false)
+function Shadow:initialize(x,y,w,scale)
+  h = w/10
+  Shadow.super.initialize(self,x,y,scale,w,h,w,h,nil,nil,nil,nil,nil,false)
 end
  
 function Shadow:update(dt)
