@@ -1,4 +1,4 @@
-HC = require 'lib.HC'
+local HC = require 'lib.HC'
 --[[
            ______,      ___    _            __   , __     _     ____
           (_) | /|   | / (_)  (_|   |   |_//\_\//|/  \ \_|_)   (|   \
@@ -9,22 +9,20 @@ HC = require 'lib.HC'
 ]]
 
 local World = HC.new()
+local polygon = require 'lib.HC.polygon'
 
-
-function World:addToWorld(item, shape, ...)
+function World:addToWorld(shape, ...)
+  local item
   if shape == 'rectangle' then
-    item.hitShape = self:rectangle(...)
+    item = self:rectangle(...)
   elseif shape == 'circle' then
-    item.hitShape = self:circle(...)
+    item = self:circle(...)
   elseif shape == 'polygon' then
-    item.hitShape = self:polygon(...)
+    item = self:polygon(...)
+  elseif shape == 'newPolygon' then
+    item = self:newPolygonShape(...)
   end
-  item.hasCol = true
+  return item
 end
 
-function World:removeFromWorld(item)
-  item.hasCol = false
-  self:remove(item.hitShape)
-end
-
-return World
+return World, polygon

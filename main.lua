@@ -45,9 +45,14 @@ end
 Debug = 0
 
 
-function giveBorders(x,y,w,h)
+function giveBorders(entity)
   love.graphics.setColor(1,0,0)
-  love.graphics.rectangle("line", x,y,w,h)
+  for key, shape in pairs(entity.hitShapes) do
+    if entity.shapes[key] == 'rectangle' then
+      local x1,y1, x2,y2 = entity.hitShapes[key]:bbox()
+      love.graphics.rectangle("line", x1, y1, x2-x1, y2-y1)
+    end
+  end
   love.graphics.setColor(1,1,1)
 end
 
@@ -109,8 +114,8 @@ function camera:followEntity()
   local x, y = love.graphics.inverseTransformPoint(width/2, height/2)
   x, y = x/self.scale, y/self.scale
   love.graphics.scale(self.scale, self.scale)
-  local w, h, scale = self.entity.animPos.w, self.entity.animPos.h, self.entity.scale
-  love.graphics.translate(-self.entity.x+x-(w*scale), -self.entity.y+y-(h*scale/2))
+  local w, h, scale = self.entity.dimensions.w, self.entity.dimensions.h, self.entity.scale
+  love.graphics.translate(-self.entity.position.x+x, -self.entity.position.y+y+(h/2*scale))
 end
 
 function camera:keepLocked()
@@ -157,11 +162,19 @@ local goBackToSpawnFunc = function(args)
   camera:resetScale()
 end
 
-function rearrangeListOnYaxis(item1, item2)
-  if item1.y + (item1.h*item1.scale) ~= item2.y + (item2.h*item2.scale) then
-    return item1.y + (item1.h*item1.scale) < item2.y + (item2.h*item2.scale)
+function rearrangeListOnYaxis(item1, item2) 
+  if item1.position.y + (item1.dimensions.h*item1.scale) ~= item2.position.y + (item2.dimensions.h*item2.scale) then
+    return item1.position.y + (item1.dimensions.h*item1.scale) < item2.position.y + (item2.dimensions.h*item2.scale)
   else
     return item1.mainIndex < item2.mainIndex
+  end
+end
+
+function rearrangeListOnChildren(item1, item2)
+  if item2.Parent ~= nil and item2.Parent == item1 then
+    local parent = findKey(entityList, item1)
+    local child = findKey(entityList, item2)
+    return parent > child
   end
 end
 
@@ -185,8 +198,6 @@ function love.draw()
   else
     camera:keepLocked()
   end
-  
-  witch:draw()
   --[[
   drawTileBatch(defaultTiles)
   drawTeleporters()
@@ -205,38 +216,35 @@ function love.draw()
 
   drawWalls(defaultWalls) 
 
+  ]]
   for _, e in ipairs(entityList) do
-    if e.spawned and not e:isInstanceOf(Ground) and
+    if e.spawned and not e:isInstanceOf(Ground) and not e.isRelative and
     (e.invincible == nil or e.invincible == 0 or (e.invincible % 2 == 0)) then
-      if e.overlayState == nil and (not e.hasOverlay or e.hasOverlay == nil) then
-        e:draw()    
-      elseif e.hasOverlay then
-        for _, c in pairs(e.children) do
-          if c.overlayState ~= nil and not c.overlayState then
-            c:draw()
-          end
+      for _, c in pairs(e.children) do
+        if not c.overlayState then
+          c:draw()
         end
-        e:draw()
-        for _, c in pairs(e.children) do
-          if c.overlayState then
-            c:draw()
-          end
+      end
+      e:draw()
+      for _, c in pairs(e.children) do
+        if c.overlayState then
+          c:draw()
         end
       end
     end
   end
 
-  setShading(defaultCenter, defaultRadii, defaultPos)
+ -- setShading(defaultCenter, defaultRadii, defaultPos)
 
   if console.enabled then
     for _, e in pairs(gridList) do 
       if e.col then
-        giveBorders(world:getRect(e))    
+        --giveBorders(world:getRect(e))    
       end
     end
     for _, e in pairs(entityList) do
-      if e.col then
-        giveBorders(world:getRect(e))
+      if e.hasCol then
+        giveBorders(e)
       end
     end
   end
@@ -245,29 +253,28 @@ function love.draw()
     h:draw()
   end
 
-  ]]
-  console:log("x: " .. witch.x .. " y: " .. witch.y)
-  console:log(Debug, witch.x-24, witch.y-20)
+  console:log("x: " .. witch.position.x .. " y: " .. witch.position.y)
+  console:log(Debug, witch.position.x-24, witch.position.y-20)
   console:draw()
 end
 
 function love.update(dt)
 
-  witch:update(dt)
-  --[[
   Hud:update()
 
   table.sort(entityList, rearrangeListOnYaxis)
+  table.sort(entityList, rearrangeListOnChildren)
 
-  for _,e in pairs(entityList) do
-    --if e:isInstanceOf(Melee) or
-    if e:isInstanceOf(Witch) or
-    e:isInstanceOf(Bat) or 
-    e:isInstanceOf(Skeleton) or 
-    e:isInstanceOf(Cauldron) or 
-    e:isInstanceOf(Shadow) then
+  for _,e in ipairs(entityList) do
+   -- if e:isInstanceOf(Melee) or
+   -- e:isInstanceOf(Witch) or
+   -- e:isInstanceOf(Bat) or 
+   -- e:isInstanceOf(Skeleton) or 
+   -- e:isInstanceOf(Cauldron) or 
+   -- e:isInstanceOf(Shadow) then
+      e:update_entity(dt)
       e:update(dt)
-    end
+    --end
     if e.isEnemy and e.invincible ~= 0 then
       e:flash(0.1)
     end
@@ -284,7 +291,7 @@ function love.update(dt)
       e:update(dt)
     end
   end
-  ]]
+
 end
 
 function love.load()
@@ -293,9 +300,9 @@ function love.load()
   love.graphics.setDefaultFilter("nearest")
  
   witch = Witch:new(0,0)
+  Hud:load(witch)
   camera.entity = witch
   --[[
-  Hud:load(witch)
   witch:addToWorldWithChildren()
 
   local tileId = Tile:addImage('default', 'sprites/brick_tile.png')
