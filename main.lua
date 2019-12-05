@@ -1,5 +1,5 @@
---local world = require 'world'
 --local anim8 = require 'lib.anim8'
+require 'world'
 require 'entities'
 require 'maps'
 require 'shaders'
@@ -46,12 +46,14 @@ Debug = 0
 
 
 function giveBorders(entity)
+  local x,y = entity.position.x, entity.position.y
+  love.graphics.setColor(0,1,0)
+  love.graphics.setPointSize(5)
+  love.graphics.points(x,y)
   love.graphics.setColor(1,0,0)
-  for key, shape in pairs(entity.hitShapes) do
-    if entity.shapes[key] == 'rectangle' then
-      local x1,y1, x2,y2 = entity.hitShapes[key]:bbox()
-      love.graphics.rectangle("line", x1, y1, x2-x1, y2-y1)
-    end
+  local shapes = entity:getActiveHitShapes()
+  for _, shape in pairs(shapes) do
+    shape:draw("line")
   end
   love.graphics.setColor(1,1,1)
 end
@@ -72,11 +74,11 @@ function drawTeleporters(teleport)
       teleportShader:send('corners', teleport.rotations[1], teleport.rotations[2], teleport.rotations[3], teleport.rotations[4], teleport.rotations[5])
       love.graphics.setShader(teleportShader)
       if teleport.active or teleport.loading then
-        love.graphics.drawLayer(teleport.image, 1, teleport.x, teleport.y, 0, teleport.scale, teleport.scale)
+        love.graphics.drawLayer(teleport.image, 1, teleport.position.x, teleport.position.y, 0, teleport.scale, teleport.scale)
       else
-        love.graphics.drawLayer(teleport.image, 2, teleport.x, teleport.y, 0, teleport.scale, teleport.scale)
+        love.graphics.drawLayer(teleport.image, 2, teleport.position.x, teleport.position.y, 0, teleport.scale, teleport.scale)
       end
-      love.graphics.drawLayer(teleport.image, 3, teleport.x, teleport.y, 0, teleport.scale, teleport.scale)
+      love.graphics.drawLayer(teleport.image, 3, teleport.position.x, teleport.position.y, 0, teleport.scale, teleport.scale)
       love.graphics.setShader()
     end
   end
@@ -198,7 +200,6 @@ function love.draw()
   else
     camera:keepLocked()
   end
-  --[[
   drawTileBatch(defaultTiles)
   drawTeleporters()
 
@@ -216,7 +217,6 @@ function love.draw()
 
   drawWalls(defaultWalls) 
 
-  ]]
   for _, e in ipairs(entityList) do
     if e.spawned and not e:isInstanceOf(Ground) and not e.isRelative and
     (e.invincible == nil or e.invincible == 0 or (e.invincible % 2 == 0)) then
@@ -234,12 +234,14 @@ function love.draw()
     end
   end
 
- -- setShading(defaultCenter, defaultRadii, defaultPos)
+  setShading(defaultCenter, defaultRadii, defaultPos)
 
   if console.enabled then
     for _, e in pairs(gridList) do 
-      if e.col then
-        --giveBorders(world:getRect(e))    
+      if e.hasCol then
+        love.graphics.setColor(1,0,0)
+        e.hitShapes["main"][1]:draw("line")    
+        love.graphics.setColor(1,1,1)    
       end
     end
     for _, e in pairs(entityList) do
@@ -287,7 +289,8 @@ function love.update(dt)
   end
   
   for _,e in pairs(gridList) do
-    if e:isInstanceOf(Teleport) then
+    if e:isInstanceOf(Teleport) or
+       e:isInstanceOf(Wall) then
       e:update(dt)
     end
   end
@@ -302,8 +305,6 @@ function love.load()
   witch = Witch:new(0,0)
   Hud:load(witch)
   camera.entity = witch
-  --[[
-  witch:addToWorldWithChildren()
 
   local tileId = Tile:addImage('default', 'sprites/brick_tile.png')
 
@@ -339,5 +340,4 @@ function love.load()
     tele2:setchild(tele)
     tele2:addOnTeleport(goBackToSpawnFunc)
   end
-  ]]
 end

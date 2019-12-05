@@ -1,6 +1,6 @@
 class = require 'lib.middleclass'
 anim8 = require 'lib.anim8'
-world, polygon = require 'world'
+shapes = require 'world'
 
 directions = {
   NO_DIRECTION = -1,
@@ -132,17 +132,17 @@ end
 ]]
 local index = {}
 
+function index:included(class)
+  class.index = 0
+  class = index:getMainClass(class)
+  class.mainIndex = 0
+end
+
 function index:getMainClass(class)
   while(class.super ~= nil) do
     class = class.super
   end
   return class
-end
-
-function index:included(class)
-  class.index = 0
-  class = index:getMainClass(class)
-  class.mainIndex = 0
 end
 
 function index:setIndex()
@@ -153,7 +153,9 @@ function index:setIndex()
   self.mainIndex = class.mainIndex
 end
 
-Entity = class('Entity'):include(index)
+Entity = class('Entity')
+Entity:include(index)
+Entity:include(shapes)
 
 function Entity:initialize(x,y,scale,w,h,arx,ary,sheet,anims,currentAnim,shadowWidth,speed,children)
   self.spawned = true
@@ -183,9 +185,6 @@ function Entity:initialize(x,y,scale,w,h,arx,ary,sheet,anims,currentAnim,shadowW
     
   }
   self.visible = true
-
-  if self.hasCol == nil then self.hasCol = false end
-
   self.speed = speed
   children = children or {}
   if shadowWidth ~= nil and shadowWidth > 0 then
@@ -198,17 +197,15 @@ function Entity:initialize(x,y,scale,w,h,arx,ary,sheet,anims,currentAnim,shadowW
     end
     for key, e in pairs(children) do
       if type(e) ~= 'table' or type(key) == 'number' then
-        error('Each child needs to be a table (with a key for reference).\n1st element needs to be the child already initialized.\n2nd element is a boolean that checks whether the child follows the parent. (optional - x and y values from child become rx and ry).\n3nd element is a boolean that checks whether a relative child is drawn OVER (true) or UNDER (false) the parent. (optional)')
+        error('Each child needs to be a table (with a key for reference).\n1st element needs to be the child already initialized.\n2nd element is a boolean that checks whether the child follows the parent. (optional - x and y values from parent become same as from child).\n3nd element is a boolean that checks whether a relative child is drawn OVER (true) or UNDER (false) the parent. (optional)')
       end
       local child = e[1]
       local relativeChild = e[2] or false
-      local overlayState = e[3] and relativeChild or nil
+      local overlayState = e[3] and relativeChild
       self.children[key] = child
       self.children[key].Parent = self
       self.children[key].isRelative = relativeChild
       if relativeChild then
-        self.children[key].position.rx = self.children[key].position.x
-        self.children[key].position.ry = self.children[key].position.y
         self.children[key].position.x = x
         self.children[key].position.y = y
       end
@@ -219,61 +216,6 @@ function Entity:initialize(x,y,scale,w,h,arx,ary,sheet,anims,currentAnim,shadowW
   table.insert(entityList, self)
 end
 
-function Entity:checkHasCol()
-  for _, c in pairs(self.hitShapes) do
-    if c ~= nil then
-      self.hasCol = true
-      return
-    end
-  end
-  self.hasCol = false
-end
-
-function Entity:getActiveHitShapes()
-  local shapes = {}
-  for key, shape in pairs(self.hitShapes) do
-    if shape ~= nil then
-      table.insert(shapes, key)
-    end
-  end
-  return shapes
-end
-
-function Entity:setHitShape(keyName,spawn,shape,...)
-  if self.shapes == nil then self.shapes = {} end
-  if self.hitShapeData == nil then self.hitShapeData = {} end
-  --if self.hitCenters == nil then self.hitCenters = {} end
-  if self.hitShapes == nil then self.hitShapes = {} end
-  self.shapes[keyName] = shape
-  self.hitShapeData[keyName] = {...}
-  local hitShape = world:addToWorld(shape, ...)
-  local cx, cy = hitShape:center()
-  -- Center position of a hitshape
-  -- EDIT: Not needed bc you can just get the center of the hitshape, wich you should move (just about) in sync with the rest anyway
-  --[[
-  self.hitCenters[keyName] = {
-    x = cx,
-    y = cy,
-    angle = 0
-  }
-  ]]
-  if spawn then
-    self.hitShapes[keyName] = hitShape
-  else
-    world:remove(hitShape)
-  end
-  self:checkHasCol()
-end
-
-function Entity:addToWorld(keyName)
-  self.hitShapes[keyName] = world:addToWorld(self.shapes[keyName], unpack(self.hitShapeData[keyName]))
-  self.hasCol = true
-end
-
-function Entity:removeFromWorld(keyName)
-  world:remove(self.hitShapes[keyName])
-  self:checkHasCol()
-end
 
 function Entity:setRelativeAnimPos(rx, ry, angle)
   self.animPos.rx, self.animPos.ry = rx, ry
@@ -283,16 +225,14 @@ function Entity:setRelativeAnimPos(rx, ry, angle)
 end
 
 function Entity:setChildRelativePos()
-  self.position.x = self.Parent.position.x - self.position.rx
-  self.position.y = self.Parent.position.y - self.position.ry
+  self.position.x = self.Parent.position.x
+  self.position.y = self.Parent.position.y
 end
 
-function Entity:removeFromWorldWithChildren()
-  world:removeFromWorld(self)
-  if self.children ~= nil then
-    for _,e in pairs(self.children) do
-      world:removeFromWorld(e)
-    end
+function Entity:removeAllHitShapes()
+  self:removeActiveHitShapes()
+  for _,e in pairs(self.children) do
+    e:removeActiveHitShapes()
   end
 end
 
@@ -305,6 +245,23 @@ function Entity:moveDir(dir, dt, knockBack)
   if self.hasCol then
     local cx, cy = self.hitShape:center()
     self.hitShape:moveTo(cx + vx, cy + vy)
+  end
+end
+
+function Entity:move(dx, dy, withChildren)
+  local actives = self:getActiveHitShapes()
+  for _, shape in pairs(actives) do
+    shape:move(dx, dy)
+  end
+  if withChildren then
+    for _, child in pairs(self.children) do
+      if child.isRelative and child.hitShapes ~= nil then
+        actives = child:getActiveHitShapes()
+        for _, shape in pairs(actives) do 
+          shape:move(dx, dy)
+        end
+      end
+    end
   end
 end
 
@@ -354,16 +311,14 @@ end
 Melee = class('Melee', Entity)
 
 function Melee:initialize(x,y,scale,w,h,arx,ary,sheet,anims,current,damage)
-  local values = {main = {2.5,4,1,1},
-                  west = {-8, -1, 7, 12}, 
-                  east = {7, -1, 7, 12}, 
-                  north = {-3, -7.5, 12, 7}, 
-                  south = {-3, 10, 12, 7}}
   self.damage = damage
   self.leftToRight = true
   self.active = false
   self.isPlayerAttack = true
-  --self:setHitShape(false,'rectangle', x - 9*scale, y - 35*scale, 6, 9.5)
+  self:setHitShape('down', nil, 'rectangle', -9,-2, 18,9)
+  self:setHitShape('up', nil, 'rectangle', -9,-20.5, 18,9)
+  self:setHitShape('left', nil, 'rectangle', -12,-15.5, 9,18)
+  self:setHitShape('right', nil, 'rectangle', 3,-15.5, 9,18)
   Melee.super.initialize(self,x,y,scale,w,h,arx,ary,sheet,anims,current)
 end
 
@@ -392,17 +347,17 @@ function Staff:setIdle()
   self.anims.current = self.anims.idle
   local x, y
   if self.direction == directions.NORTH then
-    y = 11.5
+    y = 18.5
     if self.leftToRight then x = 7.5 else x = 14 end
   elseif self.direction == directions.SOUTH then
-    y = 11
+    y = 18
     if self.leftToRight then x = 14 else x = 8 end
   elseif self.direction == directions.WEST then
     x = 14.5
-    y = 11.5
+    y = 18.5
   elseif self.direction == directions.EAST then
     x = 7.25
-    y = 11.5
+    y = 18.5
   end
   
   if self.animPos.rx ~= x or self.animPos.ry ~= y then
@@ -454,13 +409,17 @@ function Melee:update(dt)
 
       local anim 
       if self.direction == directions.WEST then
-        x,y,anim = 13.5, 10, 'westAnimation'
+        x,y,anim = 13.5, 17, 'westAnimation'
+        self:hitShape('left')
       elseif self.direction == directions.EAST then
-        x,y,anim = 7.5, 10, 'eastAnimation'
+        x,y,anim = 7.5, 17, 'eastAnimation'
+        self:hitShape('right')
       elseif self.direction == directions.NORTH then
-        x,y,anim = 10.5, 14, 'northAnimation'
+        x,y,anim = 10.5, 21, 'northAnimation'
+        self:hitShape('up')
       elseif self.direction == directions.SOUTH then
-        x,y,anim = 10.5, 7, 'southAnimation'
+        x,y,anim = 10.5, 14, 'southAnimation'
+        self:hitShape('down')
       end
 
       self:setRelativeAnimPos(x,y)
@@ -476,15 +435,9 @@ function Melee:update(dt)
       if self.leftToRight then self.leftToRight = false else self.leftToRight = true end
     
     end
-    --[[
-    for i=1,len do
-      if cols[i].other.isEnemy and cols[i].other.invincible == 0 then
-        cols[i].other:getHit(dt, self.damage, player.lastDirection)
-      end
-    end
-    ]]
     if self.anims.current.status == 'paused' then
       self:reset()
+      self:removeActiveHitShapes()
     end
   end
 end
@@ -532,8 +485,8 @@ function Witch:initialize(x,y)
   self.baseSpeed = 50
   self.tiredSpeed = 75
   self.maxSpeed = 100
-  self:setHitShape('main', true, 'rectangle', x - 3, y - 11.66, 6, 9.5)
   local children = { Staff = {Staff(0,7), true, true}}
+  self:setHitShape('main', {x,y}, 'rectangle', -3, -11.66, 6, 9.5)
   Witch.super.initialize(self,x,y,scale,w,h,w/2*scale,h*scale,sheet,anims,anims.southIdle,6.5,self.baseSpeed,children)
   self.direction = -1
 end
@@ -541,7 +494,15 @@ end
 function Witch:update(dt)
   self:checkMoveStatus(dt)
   self:checkLocked()
-  self:move(dt)
+
+  if self.moveStatus ~= 'idle' then
+    local direction = self.lastDirection
+    local dx = (direction == 1 and 1 or direction == 3 and -1 or 0) *dt*self.speed
+    local dy = (direction == 2 and 1 or direction == 0 and -1 or 0) *dt*self.speed
+    self.position.x, self.position.y = self.position.x + dx, self.position.y + dy
+    self:move(dx, dy, true)
+  end
+  
   self:checkStamina(dt)
   self:updateAnims(dt)
 end
@@ -713,13 +674,15 @@ function Witch:updateAnims(dt)
   end
 end
 
+
+--[[
 function Witch:move(dt)
   if self.moveStatus ~= 'idle' then
     local direction = self.lastDirection
     local dx = (direction == 1 and 1 or direction == 3 and -1 or 0) *dt*self.speed
     local dy = (direction == 2 and 1 or direction == 0 and -1 or 0) *dt*self.speed
     self.position.x, self.position.y = self.position.x + dx, self.position.y + dy
-    self.hitShapes['main']:move(dx, dy)
+    self.super:move(dx, dy, true)
     --self.colPos.x, self.colPos.y = self.hitShape:center()
     --[[
     for i = 1, len do
@@ -738,11 +701,12 @@ function Witch:move(dt)
         end
       end
     end
-    ]]
   end
   --Debug = 'Direction: ' .. self.direction .. ' Last: ' .. self.lastDirection .. ' Face: ' .. self.faceDirection .. ' moveStatus: ' .. self.moveStatus .. ' Speed: ' .. self.speed
   --Debug = 'WalkTime ' .. self.walkTime .. ' speed ' .. self.speed
 end
+]]
+
 
 function Witch:draw()
   local playerAnims = self.anims
@@ -1191,33 +1155,24 @@ end
                                                                                                       
 ]]
 
-Grid = class('Grid'):include(index)
+Grid = class('Grid'):include(index):include(shapes)
 
-function Grid:initialize(x,y,w,h,imageKey,scale,col,colValues,direction,filter)
-  self.x = x
-  self.y = y
-  self.w = w
-  self.h = h
-  self.current = nil
+function Grid:initialize(x,y,w,h,imageKey,scale,direction)
+  self.position = {
+    x = x,
+    y = y
+  }
+  self.dimensions = {
+    w = w,
+    h = h
+  }
   if self.images[imageKey] == nil then
     error("Didn't find '".. tostring(imageKey) .."' in images. Use the static method 'Grid:addImage(imagekey, fileLocation)' first before initializing object with that key...")
   else
     self.current = self.images[imageKey]
   end
   self.scale = scale
-  self.col = col
-  if colValues == nil then
-    colValues = {0,0,0,0}
-  else
-    for i=1, #colValues do
-      if colValues[i] == nil then
-        colValues[i] = 0
-      end
-    end
-  end
-  self:setValues(x+colValues[1], y+colValues[2], colValues[3], colValues[4])
   self.direction = direction
-  self.filter = filter
   self:setIndex()
   table.insert(gridList, self)
 end
@@ -1270,49 +1225,17 @@ function Grid.static:getImageData(key, imageId)
   end
 end
 
-function Grid:addToWorld()
-  local xMod = self.values[1]
-  local yMod = self.values[2]
-  local wMod = self.values[3]
-  local hMod = self.values[4]
-  world:add(self, xMod, yMod, wMod, hMod)
-  self.col = true
-end
-
-function Grid:removeFromWorld()
-  world:remove(self)
-  self.col = false
-end
-
-
-function Grid:setValues(x,y,w,h)
-  x = x or self.values[1] or self.x
-  y = y or self.values[2] or self.y
-  w = w or self.values[3] or self.w
-  h = h or self.values[4] or self.h
-  self.values = {x,y,w,h}
-end
-
-
 Tile = class('Tile', Grid)
 
 function Tile:initialize(x,y,size,image,imageKey,scale)
   self.image = image
-  Tile.super.initialize(self,x,y,w,h,imageKey,scale,false,nil,-1)
+  Tile.super.initialize(x,y,size,size,imageKey,nil,-1)
 end
 
 Wall = class('Wall', Grid)
 
 function Wall:initialize(x,y,w,h,imageKey,scale,dir)
-  local filter = function(item, other)  
-    if other.isPlayerAttack then
-      return 'cross'
-    else
-      return 'slide'
-    end
-  end
-  local colValues = {0,0,w,h}
-  Wall.super.initialize(self,x,y,w,h,imageKey,scale,true,colValues,dir,filter)
+  Wall.super.initialize(self,x,y,w,h,imageKey,scale,dir)
 end
 
 Corner = class('Corner', Wall)
@@ -1321,21 +1244,23 @@ function Corner:initialize(x,y,w,h,imageKey,scale,dir)
   Corner.super.initialize(self,x,y,w,h,imageKey,scale,dir)
 end
 
+function Wall:update(dt)
+  local shape = self:getHitShape("main")
+  local cols = self:getCollisions("main")
+  for other, separating_vector in pairs(cols) do
+    shape:move( separating_vector.x/2,  separating_vector.y/2)
+    other:move(-separating_vector.x/2, -separating_vector.y/2)
+  end
+end
+
 Door = class('Door', Grid)
 
 function Door:initialize(x,y,w,h,imageKey,scale,dir)
-  local filter = function(item, other) return 'cross' end
-  local colValues = {0,0,w,h}
-  Door.super.initialize(self,x,y,w,h,imageKey,scale,true,colValues,dir,filter)
+  Door.super.initialize(self,x,y,w,h,imageKey,scale,dir)
 end
 
 function Door:checkCollision()
-  local actualX, actualY, cols, len = world:check(self, self.values[1], self.values[2], self.filter)
-  for i=1, len do
-    if cols[i].other:isInstanceOf(Witch) then
-      
-    end
-  end
+  
 end
 
 Teleport = class('Teleport', Grid)
@@ -1356,9 +1281,6 @@ end
                                                                   -- unkown == tele or desX 
 function Teleport:initialize(x,y,size,image,imageKey,scale,shouldLoad,unkown,desY)
   self.image = image
-  local filter = function(item, other)  return 'cross' end
-  local col = false
-  if active then col = true end
   self.rotationSpeed = 80
   self.timer = 0
   self.loadSpeed = 8
@@ -1368,28 +1290,34 @@ function Teleport:initialize(x,y,size,image,imageKey,scale,shouldLoad,unkown,des
   end
   self.active = false 
   self.hidden = false
-  local colValues = {5,5,6,6}
   if type(unkown) == 'table' then
     self:setchild(unkown)
   elseif type(unkown) == 'number' and desY ~= nil then
-    self.desX = unkown
-    self.desY = desY
+    self.destiny = {
+      x = unkown,
+      y = desY
+    }
   end
   self:resetRotations()
-  Teleport.super.initialize(self,x,y,size,size,imageKey,scale,col,colValues,-1,filter)
+  self:setHitShape("main", nil, "circle", size*scale,size*scale, size/2*scale)
+  Teleport.super.initialize(self,x,y,size,size,imageKey,scale,-1)
 end
 
 function Teleport:setchild(child)
   self.child = child
   self.child.child = self
-  self.desX = child.values[1]
-  self.desY = child.values[2]
+  self.destiny = {
+    x = child.position[1],
+    y = child.position[2]
+  } 
 end
 
 function Teleport:teleportEntity(entity)
-  entity.x = self.desX
-  entity.y = self.desY
-  world:update(entity, self.desX, self.desY) 
+  entity.position = {
+    x = self.desX,
+    y = self.desY
+  }
+ -- world:update(entity, self.desX, self.desY) 
 end
 
 function Teleport:addOnTeleport(f, ...)
@@ -1400,7 +1328,7 @@ function Teleport:deactivate()
   self.active = false
   self.loading = false
   self.timer = 0
-  self:removeFromWorld()
+  self:removeHitShape("main")
 end
 
 function Teleport:resetRotations()
@@ -1419,10 +1347,11 @@ end
 function Teleport:activate()
   self.active = true
   self.loading = false
-  self:addToWorld()
+  self:hitShape("main")
 end
 
 function Teleport:checkCollision()
+  --[[
   local actualX, actualY, cols, len = world:check(self, self.x, self.y, self.filter)
   for i = 1, len do
     if cols[i].other:isInstanceOf(Witch) then
@@ -1434,6 +1363,7 @@ function Teleport:checkCollision()
       hasBeenInRoom = true
     end
   end
+  ]]
 end
 
 function Teleport:setTeleShader(dt)

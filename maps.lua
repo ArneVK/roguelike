@@ -40,7 +40,7 @@ tileMap = {
 
 
 
-mapX, mapY = -66, -130
+mapX, mapY = -72, -140
 
 defaultMapComplex = { -- test
   {{NOTH, 0}, {CORN, 0},{CORN, 3},{TILE, 0},{CORN, 2},{CORN, 1},{NOTH, 0}},
@@ -243,10 +243,11 @@ end
 
 function setCorner(startx, starty, x, y, batchKey, size, scale, dir, nextDir, bigGap)
     local cornrObject = Corner(startx + x*size, starty + y*size, size, size, batchKey, scale, dir)            
+    local h = size
     if dir == 3 or dir == 2 then
-      cornrObject:setValues(startx + x*size, starty + y*size, size, size - bigGap)
+      h = size - bigGap
     end
-    cornrObject:addToWorld()
+    cornrObject:setHitShape("main", {startx + x*size, starty + y*size}, "rectangle", 0,0, size, h)
     local xMod = nextDir == directions.EAST and 1 or nextDir == directions.WEST and -1 or 0
     local yMod = nextDir == directions.SOUTH and 1 or nextDir == directions.NORTH and -1 or 0
     local nextX, nextY = x + xMod, y + yMod
@@ -255,10 +256,11 @@ end
 
 function setWall(startx, starty, x, y, batchKey, size, scale, dir, nextDir, bigGap)
   local wall = Wall(startx + x*size, starty + y*size, size, size, batchKey, scale, dir)
+  local h = size
   if dir == 0 or dir == 2 then
-    wall:setValues(startx + x*size, starty + y*size, size, size - bigGap)
+    h = size - bigGap
   end
-  wall:addToWorld()
+  wall:setHitShape("main", {startx + x*size, starty + y*size}, "rectangle", 0,0, size, h)
   local xMod = nextDir == directions.EAST and 1 or nextDir == directions.WEST and -1 or 0
   local yMod = nextDir == directions.SOUTH and 1 or nextDir == directions.NORTH and -1 or 0
   return x + xMod, y + yMod
