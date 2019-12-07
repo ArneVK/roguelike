@@ -37,7 +37,7 @@ shapes = {
     - [2] : shape (name)
     - [3] : shapeData (For respawning after removal)
     - [4] : is it active?
-
+    - [5] : relative position (x and y in table)
     ]]
     
 
@@ -76,6 +76,7 @@ shapes = {
         error("When using shape 'polygon' or 'newPolygon', you need a x and an y value for each point")
       end
     end
+    hitShape.parent = self
     self.hitShapes[keyName][1] = hitShape
     self.hitShapes[keyName][4] = true
     self:checkHasCol()
@@ -84,14 +85,19 @@ shapes = {
 
   -- Give position if you want the hitshape to also spawn
 
-  setHitShape = function(self,keyName,position,shape,...)
+  setHitShape = function(self,keyName,keepSpawned,shape,...)
     if self.hitShapes == nil then self.hitShapes = {} end
     self.hitShapes[keyName] = {}
     self.hitShapes[keyName][2] = shape
     self.hitShapes[keyName][3] = {...}
     self.hitShapes[keyName][4] = false
-    if position ~= nil then
-      self:hitShape(keyName, position)
+    local shape = self:hitShape(keyName)
+    local cx,cy = shape:center()
+    cx = cx - self.position.x 
+    cy = cy - self.position.y
+    self.hitShapes[keyName][5] = { x = cx, y = cy}
+    if not keepSpawned then
+      self:removeHitShape(keyName)
     end
   end,
 
@@ -122,6 +128,10 @@ shapes = {
       end
       return newArg
     end
+  end,
+
+  getHitShapeRelativePos = function(self,keyName)
+    return self.hitShapes[keyName][5].x, self.hitShapes[keyName][5].y
   end,
 
   removeActiveHitShapes = function(self)
@@ -161,11 +171,29 @@ shapes = {
 
   getCollisions = function(self, keyName)
     return World:collisions(self.hitShapes[keyName][1])
+  end,
+
+  update_shape_properties = function(self)
+    local rules = self.class.shapeProperties
+    for class, rule in pairs(rules) do
+      
+    end
   end
 }
 
 function shapes:included(class)
   class.defaultShape = "rectangle"
+  class.shapeProperties = {}
+  class.static.addShapeProperties = function(class1, f)
+    self.shapeProperties[class1] = f
+  end
+
+  class.static.subclassed = function(sub)
+    sub.shapeProperties = {}
+    sub.static.addShapeProperties = function(class1, f)
+      self.shapeProperties[class1] = f
+    end
+  end
 end
 
 return shapes

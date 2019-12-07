@@ -117,7 +117,7 @@ function camera:followEntity()
   x, y = x/self.scale, y/self.scale
   love.graphics.scale(self.scale, self.scale)
   local w, h, scale = self.entity.dimensions.w, self.entity.dimensions.h, self.entity.scale
-  love.graphics.translate(-self.entity.position.x+x, -self.entity.position.y+y+(h/2*scale))
+  love.graphics.translate(-self.entity.position.x+x, -self.entity.position.y+y)
 end
 
 function camera:keepLocked()
@@ -152,7 +152,6 @@ local spawnEntitiesFunction = function(args)
   local size = args[5] or 16
   for _,e in pairs(entities) do
     local obj = e[1]:new(x + e[2], y + e[3])
-    obj:addToWorld()
     table.insert(entityIndexes, obj.mainIndex)
   end
   camera:lockToMap(map, size, x, y)
@@ -203,6 +202,9 @@ function love.draw()
   drawTileBatch(defaultTiles)
   drawTeleporters()
 
+  table.sort(entityList, rearrangeListOnYaxis)
+  table.sort(entityList, rearrangeListOnChildren)
+
   for _, e in ipairs(entityList) do
     if e:isInstanceOf(Ground) and e.spawned and not e:isInstanceOf(Shadow) then
       e:draw()
@@ -217,17 +219,18 @@ function love.draw()
 
   drawWalls(defaultWalls) 
 
+
   for _, e in ipairs(entityList) do
     if e.spawned and not e:isInstanceOf(Ground) and not e.isRelative and
-    (e.invincible == nil or e.invincible == 0 or (e.invincible % 2 == 0)) then
+    e.visible then
       for _, c in pairs(e.children) do
-        if not c.overlayState then
+        if not c.overlayState and c.spawned and not c:isInstanceOf(Ground) and c.visible then
           c:draw()
         end
       end
       e:draw()
       for _, c in pairs(e.children) do
-        if c.overlayState then
+        if c.overlayState and c.spawned and not c:isInstanceOf(Ground) and c.visible then
           c:draw()
         end
       end
@@ -240,7 +243,7 @@ function love.draw()
     for _, e in pairs(gridList) do 
       if e.hasCol then
         love.graphics.setColor(1,0,0)
-        e.hitShapes["main"][1]:draw("line")    
+        e:getHitShape("main"):draw("line")    
         love.graphics.setColor(1,1,1)    
       end
     end
@@ -264,22 +267,14 @@ function love.update(dt)
 
   Hud:update()
 
-  table.sort(entityList, rearrangeListOnYaxis)
-  table.sort(entityList, rearrangeListOnChildren)
+  for _, timer in pairs(timers) do
+    timer:update(dt)
+  end
 
   for _,e in ipairs(entityList) do
-   -- if e:isInstanceOf(Melee) or
-   -- e:isInstanceOf(Witch) or
-   -- e:isInstanceOf(Bat) or 
-   -- e:isInstanceOf(Skeleton) or 
-   -- e:isInstanceOf(Cauldron) or 
-   -- e:isInstanceOf(Shadow) then
-      e:update_entity(dt)
-      e:update(dt)
-    --end
-    if e.isEnemy and e.invincible ~= 0 then
-      e:flash(0.1)
-    end
+    e:update_children(dt)
+    e:update_anims(dt)
+    e:update(dt)
   end
 
   --testtest
@@ -337,7 +332,7 @@ function love.load()
   defaultTiles, defaultWalls, tele2 = genMapBatchComplex(mapX, mapY, 'default', roomMap, tele, 32, 1/2, true)
   defaultRadii, defaultCenter, defaultPos = getMapRadiusAndCenter(mapX, mapY, roomMap, 16)
   if tele2 ~= -1 then
-    tele2:setchild(tele)
+    tele2:setDestiny(tele)
     tele2:addOnTeleport(goBackToSpawnFunc)
   end
 end

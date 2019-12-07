@@ -242,12 +242,12 @@ function getLengthAndMiddleCoor(startx, starty, currx, curry, cornx, corny, dir,
 end
 
 function setCorner(startx, starty, x, y, batchKey, size, scale, dir, nextDir, bigGap)
-    local cornrObject = Corner(startx + x*size, starty + y*size, size, size, batchKey, scale, dir)            
+    local cornrObject = Corner(startx + x*size, starty + y*size, size, batchKey, scale, dir)            
     local h = size
     if dir == 3 or dir == 2 then
       h = size - bigGap
     end
-    cornrObject:setHitShape("main", {startx + x*size, starty + y*size}, "rectangle", 0,0, size, h)
+    cornrObject:setHitShape("main", true, "rectangle", 0,0, size, h)
     local xMod = nextDir == directions.EAST and 1 or nextDir == directions.WEST and -1 or 0
     local yMod = nextDir == directions.SOUTH and 1 or nextDir == directions.NORTH and -1 or 0
     local nextX, nextY = x + xMod, y + yMod
@@ -255,12 +255,12 @@ function setCorner(startx, starty, x, y, batchKey, size, scale, dir, nextDir, bi
 end
 
 function setWall(startx, starty, x, y, batchKey, size, scale, dir, nextDir, bigGap)
-  local wall = Wall(startx + x*size, starty + y*size, size, size, batchKey, scale, dir)
+  local wall = Wall(startx + x*size, starty + y*size, size, batchKey, scale, dir)
   local h = size
   if dir == 0 or dir == 2 then
     h = size - bigGap
   end
-  wall:setHitShape("main", {startx + x*size, starty + y*size}, "rectangle", 0,0, size, h)
+  wall:setHitShape("main", true, "rectangle", 0,0, size, h)
   local xMod = nextDir == directions.EAST and 1 or nextDir == directions.WEST and -1 or 0
   local yMod = nextDir == directions.SOUTH and 1 or nextDir == directions.NORTH and -1 or 0
   return x + xMod, y + yMod
@@ -673,7 +673,7 @@ function getEntryCoorMap(startx, starty, map, key, scale, tele)
         local v = m[1]
         local w = m[2]
         if v == tele and (w == teleportDirections.ENTRY or w == teleportDirections.HIDDENENTRY) then
-            returnX, returnY = startx + x*size*scale + size*scale/6, starty + y*size*scale - size*scale/2
+            returnX, returnY = startx + x*size*scale + size*scale/2, starty + y*size*scale + size*scale/2
             return returnX, returnY
         end
         end
